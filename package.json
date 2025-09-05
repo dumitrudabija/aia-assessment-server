@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
     "start": "node build/index.js",
+    "start:http": "node build/http-server.js",
     "dev": "tsc && node build/index.js",
+    "dev:http": "tsc && node build/http-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,7 +17,11 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.5",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
     "@types/node": "^24.3.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "typescript": "^5.9.2"
   }
 }
