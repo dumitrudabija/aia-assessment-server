@@ -12,6 +12,26 @@ The server implements Canada's AIA framework which includes:
 
 ## Available Tools
 
+### `analyze_project_description` ⭐ **NEW!**
+Intelligently analyze a project description to automatically answer AIA questions where possible and identify questions requiring manual input.
+
+**Parameters:**
+- `projectName` (string): Name of the project being analyzed
+- `projectDescription` (string): Detailed description of the project and its automated decision-making components
+
+**Returns:**
+- `autoAnswered`: Questions automatically answered with confidence levels and reasoning
+- `needsManualInput`: Questions that require manual user input
+- `partialAssessment`: Preliminary impact assessment based on auto-answered questions
+
+**Example Usage:**
+```json
+{
+  "projectName": "AI-Powered Loan System",
+  "projectDescription": "Fully automated machine learning system using personal data to make lending decisions with bias testing and PIA planned"
+}
+```
+
 ### `assess_project`
 Assess a project using Canada's Algorithmic Impact Assessment framework.
 
@@ -89,14 +109,36 @@ The server includes a representative sample of questions from each category:
 - **Consultations**: Stakeholder engagement
 - **Mitigation**: Data quality, procedural fairness, privacy
 
+## Intelligent Document Analysis Workflow
+
+The new `analyze_project_description` tool enables a streamlined assessment process:
+
+1. **User provides project description** in natural language
+2. **AI analyzes the text** using pattern matching to identify key indicators
+3. **Questions are automatically answered** where sufficient information is available
+4. **Confidence levels assigned** (high/medium/low) with reasoning provided
+5. **Partial assessment generated** showing preliminary impact level
+6. **Remaining questions identified** for manual user input
+
+### Auto-Detection Patterns
+
+The system can automatically detect:
+- **Development approach**: Internal vs third-party development
+- **Data usage**: Personal information, sensitive data classifications
+- **Automation level**: Full automation vs human-in-the-loop
+- **Sector applicability**: Health, financial, law enforcement, licensing
+- **Algorithm complexity**: Machine learning, black-box systems
+- **Mitigation measures**: Bias testing, consultations, PIA, monitoring
+
 ## Usage in LLM Chatbots
 
 This MCP server enables LLM chatbots to:
-1. Present AIA questions to users
-2. Collect responses about their AI projects
-3. Calculate impact scores automatically
-4. Provide immediate feedback on audit requirements
-5. Generate reports for compliance purposes
+1. **Analyze project descriptions** automatically using intelligent pattern matching
+2. Present remaining AIA questions to users for manual input
+3. Collect responses about their AI projects
+4. Calculate impact scores automatically
+5. Provide immediate feedback on audit requirements
+6. Generate reports for compliance purposes
 
 ## Example Assessment Result
 

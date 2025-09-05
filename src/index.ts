@@ -53,6 +53,43 @@ interface ProjectAssessmentArgs {
   }>;
 }
 
+interface AnalyzeProjectArgs {
+  projectName: string;
+  projectDescription: string;
+}
+
+interface AutoAnsweredQuestion {
+  questionId: string;
+  question: string;
+  selectedOption: number;
+  selectedText: string;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+}
+
+interface ProjectAnalysisResult {
+  projectName: string;
+  projectDescription: string;
+  autoAnswered: AutoAnsweredQuestion[];
+  needsManualInput: Array<{
+    questionId: string;
+    question: string;
+    category: string;
+    type: 'risk' | 'mitigation';
+    options: Array<{ text: string; score: number }>;
+    reasoning: string;
+  }>;
+  partialAssessment?: {
+    rawImpactScore: number;
+    mitigationScore: number;
+    currentScore: number;
+    impactLevel: 'I' | 'II' | 'III' | 'IV';
+    impactLevelDescription: string;
+    scorePercentage: number;
+    completionPercentage: number;
+  };
+}
+
 const isValidProjectAssessmentArgs = (
   args: any
 ): args is ProjectAssessmentArgs =>
@@ -61,6 +98,14 @@ const isValidProjectAssessmentArgs = (
   typeof args.projectName === 'string' &&
   typeof args.projectDescription === 'string' &&
   (args.responses === undefined || Array.isArray(args.responses));
+
+const isValidAnalyzeProjectArgs = (
+  args: any
+): args is AnalyzeProjectArgs =>
+  typeof args === 'object' &&
+  args !== null &&
+  typeof args.projectName === 'string' &&
+  typeof args.projectDescription === 'string';
 
 class AIAAssessmentServer {
   private server: Server;
@@ -93,199 +138,619 @@ class AIAAssessmentServer {
   }
 
   private initializeQuestions(): AIAQuestion[] {
-    // Sample questions based on Canada's AIA framework
-    // In a full implementation, this would include all 106 questions
+    // 25 representative questions based on Canada's official AIA framework
+    // Selected from the official survey-enfr.json to cover all key categories
     return [
-      // Risk Questions - Project Category
+      // RISK QUESTIONS (18 total)
+      
+      // Project Category (3 questions)
       {
-        id: 'project_001',
+        id: 'riskProfile1',
         category: 'Project',
         subcategory: 'Risk Profile',
-        question: 'Will the system be used to make decisions about vulnerable populations (e.g., children, elderly, persons with disabilities)?',
-        type: 'risk',
-        maxScore: 4,
-        options: [
-          { text: 'No', score: 0 },
-          { text: 'Yes, but with limited impact', score: 1 },
-          { text: 'Yes, with moderate impact', score: 2 },
-          { text: 'Yes, with significant impact', score: 4 }
-        ]
-      },
-      {
-        id: 'project_002',
-        category: 'Project',
-        subcategory: 'Risk Profile',
-        question: 'Could the system result in discrimination or unfair treatment of individuals or groups?',
-        type: 'risk',
-        maxScore: 4,
-        options: [
-          { text: 'Very unlikely', score: 0 },
-          { text: 'Unlikely', score: 1 },
-          { text: 'Possible', score: 2 },
-          { text: 'Likely', score: 4 }
-        ]
-      },
-      // System Category
-      {
-        id: 'system_001',
-        category: 'System',
-        subcategory: 'About the System',
-        question: 'Is the system a black box (i.e., decisions cannot be explained)?',
+        question: 'Is the project within an area of intense public scrutiny (for example, because of privacy concerns) and/or frequent litigation?',
         type: 'risk',
         maxScore: 3,
         options: [
-          { text: 'No, fully explainable', score: 0 },
-          { text: 'Partially explainable', score: 1 },
-          { text: 'Limited explainability', score: 2 },
-          { text: 'Not explainable (black box)', score: 3 }
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 3 }
         ]
       },
-      // Algorithm Category
       {
-        id: 'algorithm_001',
-        category: 'Algorithm',
-        subcategory: 'About the Algorithm',
-        question: 'Does the algorithm learn and evolve through use (machine learning)?',
+        id: 'riskProfile2',
+        category: 'Project',
+        subcategory: 'Risk Profile',
+        question: 'Does the line of business serve equity denied groups?',
+        type: 'risk',
+        maxScore: 3,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 3 }
+        ]
+      },
+      {
+        id: 'projectAuthority1',
+        category: 'Project',
+        subcategory: 'Project Authority',
+        question: 'Will you require new policy or legal authority for this project?',
         type: 'risk',
         maxScore: 2,
         options: [
           { text: 'No', score: 0 },
-          { text: 'Yes, with human oversight', score: 1 },
-          { text: 'Yes, with limited oversight', score: 2 }
+          { text: 'Yes', score: 2 }
         ]
       },
-      // Decision Category
+
+      // System Category (3 questions)
       {
-        id: 'decision_001',
+        id: 'aboutSystem3',
+        category: 'System',
+        subcategory: 'About the System',
+        question: 'Who developed the system?',
+        type: 'risk',
+        maxScore: 1,
+        options: [
+          { text: 'Your institution', score: 0 },
+          { text: 'Another federal institution', score: 0 },
+          { text: 'Another government', score: 1 },
+          { text: 'A non-government third party', score: 1 }
+        ]
+      },
+      {
+        id: 'aboutSystem6',
+        category: 'System',
+        subcategory: 'About the System',
+        question: 'Have you assigned accountability in your institution for the design, development, and maintenance, of the system?',
+        type: 'risk',
+        maxScore: 2,
+        options: [
+          { text: 'Yes', score: 0 },
+          { text: 'No', score: 2 }
+        ]
+      },
+      {
+        id: 'aboutSystem9',
+        category: 'System',
+        subcategory: 'About the System',
+        question: 'Is a non-automated alternative planned and available in the event the automated decision system was unavailable for an extended period of time?',
+        type: 'risk',
+        maxScore: 2,
+        options: [
+          { text: 'Yes', score: 0 },
+          { text: 'No', score: 2 }
+        ]
+      },
+
+      // Algorithm Category (3 questions)
+      {
+        id: 'aboutAlgorithm2',
+        category: 'Algorithm',
+        subcategory: 'About the Algorithm',
+        question: 'The algorithmic process will be difficult to interpret or to explain',
+        type: 'risk',
+        maxScore: 3,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 3 }
+        ]
+      },
+      {
+        id: 'aboutAlgorithm8',
+        category: 'Algorithm',
+        subcategory: 'About the Algorithm',
+        question: 'Will the algorithm continue to learn and evolve as it is used?',
+        type: 'risk',
+        maxScore: 3,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 3 }
+        ]
+      },
+      {
+        id: 'aboutAlgorithm9',
+        category: 'Algorithm',
+        subcategory: 'About the Algorithm',
+        question: 'Does the algorithm consider protected characteristics to make its decisions or recommendations?',
+        type: 'risk',
+        maxScore: 2,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 2 }
+        ]
+      },
+
+      // Decision Category (1 question)
+      {
+        id: 'decisionSector1',
         category: 'Decision',
         subcategory: 'About the Decision',
-        question: 'What is the level of human involvement in the decision-making process?',
+        question: 'Does the decision pertain to any of the following categories: Health-related services, Economic interests, Social assistance, Access and mobility, Licensing and permits, Employment, Public safety and law enforcement?',
         type: 'risk',
-        maxScore: 8,
+        maxScore: 1,
         options: [
-          { text: 'Human makes final decision with system recommendation', score: 0 },
-          { text: 'Human reviews system decision before implementation', score: 2 },
-          { text: 'System makes decision with human oversight', score: 4 },
-          { text: 'Fully automated decision-making', score: 8 }
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 1 }
         ]
       },
-      // Impact Category
+
+      // Impact Category (5 questions)
       {
-        id: 'impact_001',
+        id: 'impact30',
         category: 'Impact',
         subcategory: 'Impact Assessment',
-        question: 'Could the decision impact an individual\'s liberty, security, or physical safety?',
-        type: 'risk',
-        maxScore: 5,
-        options: [
-          { text: 'No impact', score: 0 },
-          { text: 'Minor impact', score: 1 },
-          { text: 'Moderate impact', score: 3 },
-          { text: 'Significant impact', score: 5 }
-        ]
-      },
-      {
-        id: 'impact_002',
-        category: 'Impact',
-        subcategory: 'Impact Assessment',
-        question: 'Could the decision significantly impact an individual\'s economic interests?',
+        question: 'Which of the following best describes the type of automation you are planning?',
         type: 'risk',
         maxScore: 4,
         options: [
-          { text: 'No economic impact', score: 0 },
-          { text: 'Minor economic impact', score: 1 },
-          { text: 'Moderate economic impact', score: 2 },
-          { text: 'Significant economic impact', score: 4 }
+          { text: 'Partial automation (the system will contribute to administrative decision-making by supporting an officer)', score: 2 },
+          { text: 'Full automation (the system will make an administrative decision)', score: 4 }
         ]
       },
-      // Data Category
       {
-        id: 'data_001',
-        category: 'Data',
-        subcategory: 'About the Data',
-        question: 'Does the system use personal information?',
+        id: 'impact6',
+        category: 'Impact',
+        subcategory: 'Impact Assessment',
+        question: 'Are the impacts resulting from the decision reversible?',
+        type: 'risk',
+        maxScore: 4,
+        options: [
+          { text: 'Reversible', score: 1 },
+          { text: 'Likely reversible', score: 2 },
+          { text: 'Difficult to reverse', score: 3 },
+          { text: 'Irreversible', score: 4 }
+        ]
+      },
+      {
+        id: 'impact9',
+        category: 'Impact',
+        subcategory: 'Impact Assessment',
+        question: 'The impacts that the decision could have on the rights or freedoms of individuals may be:',
+        type: 'risk',
+        maxScore: 4,
+        options: [
+          { text: 'Little to no impact', score: 1 },
+          { text: 'Moderate impact', score: 2 },
+          { text: 'High impact', score: 3 },
+          { text: 'Very high impact', score: 4 }
+        ]
+      },
+      {
+        id: 'impact13',
+        category: 'Impact',
+        subcategory: 'Impact Assessment',
+        question: 'The impacts that the decision could have on the economic interests of individuals may be:',
+        type: 'risk',
+        maxScore: 4,
+        options: [
+          { text: 'Little to no impact', score: 1 },
+          { text: 'Moderate impact', score: 2 },
+          { text: 'High impact', score: 3 },
+          { text: 'Very high impact', score: 4 }
+        ]
+      },
+      {
+        id: 'impact18',
+        category: 'Impact',
+        subcategory: 'Impact Assessment',
+        question: 'Have you assessed system performance for clients with a range of personal and intersectional identity factors to verify that decisions and outcomes are fair for a diverse group of people?',
         type: 'risk',
         maxScore: 3,
         options: [
-          { text: 'No personal information', score: 0 },
-          { text: 'Non-sensitive personal information', score: 1 },
-          { text: 'Sensitive personal information', score: 2 },
-          { text: 'Highly sensitive personal information', score: 3 }
+          { text: 'Assessment conducted; no performance differences identified', score: 0 },
+          { text: 'Assessment conducted; performance differences identified and are justified. Downstream impacts have been considered and addressed', score: 1 },
+          { text: 'Assessment conducted; performance differences identified and are justified. Downstream impacts have not been considered or addressed', score: 2 },
+          { text: 'No assessment has been conducted', score: 3 }
         ]
       },
+
+      // Data Category (3 questions)
       {
-        id: 'data_002',
+        id: 'aboutDataSource1',
         category: 'Data',
         subcategory: 'About the Data',
-        question: 'What is the quality and representativeness of the training data?',
+        question: 'Will the system use personal information as input data?',
         type: 'risk',
-        maxScore: 3,
+        maxScore: 2,
         options: [
-          { text: 'High quality, representative data', score: 0 },
-          { text: 'Good quality, mostly representative', score: 1 },
-          { text: 'Moderate quality, some gaps', score: 2 },
-          { text: 'Poor quality or unrepresentative data', score: 3 }
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 2 }
         ]
       },
-      // Mitigation Questions - Consultations
       {
-        id: 'consultation_001',
+        id: 'aboutDataSource15',
+        category: 'Data',
+        subcategory: 'About the Data',
+        question: 'Is the training and testing data for the system representative of the clients being served?',
+        type: 'risk',
+        maxScore: 2,
+        options: [
+          { text: 'Yes', score: 0 },
+          { text: 'Unsure', score: 1 },
+          { text: 'No', score: 2 }
+        ]
+      },
+      {
+        id: 'aboutDataSource2',
+        category: 'Data',
+        subcategory: 'About the Data',
+        question: 'What is the highest security classification of the input data used by the system?',
+        type: 'risk',
+        maxScore: 4,
+        options: [
+          { text: 'None', score: 0 },
+          { text: 'Protected A', score: 1 },
+          { text: 'Confidential', score: 2 },
+          { text: 'Protected B', score: 3 },
+          { text: 'Secret', score: 4 },
+          { text: 'Top Secret', score: 4 }
+        ]
+      },
+
+      // MITIGATION QUESTIONS (7 total)
+
+      // Consultations Category (2 questions)
+      {
+        id: 'consultationDesign6',
         category: 'Consultations',
         subcategory: 'About the Consultations',
-        question: 'Have you consulted with affected communities or stakeholders?',
+        question: 'Will you consult with the clients that will be most impacted by the system?',
         type: 'mitigation',
         maxScore: 3,
         options: [
-          { text: 'No consultations conducted', score: 0 },
-          { text: 'Limited consultations', score: 1 },
-          { text: 'Moderate consultations', score: 2 },
-          { text: 'Extensive consultations', score: 3 }
+          { text: 'No', score: 0 },
+          { text: 'Unsure', score: 0 },
+          { text: 'Yes', score: 3 }
         ]
       },
-      // Mitigation Questions - De-risking measures
       {
-        id: 'mitigation_001',
+        id: 'consultationDesign7',
+        category: 'Consultations',
+        subcategory: 'About the Consultations',
+        question: 'Will you consult with clients or communities that will be adversely impacted by the system?',
+        type: 'mitigation',
+        maxScore: 3,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Unsure', score: 0 },
+          { text: 'Yes', score: 3 }
+        ]
+      },
+
+      // De-risking Category (5 questions)
+      {
+        id: 'dataQualityDesign1',
         category: 'De-risking',
         subcategory: 'Data Quality',
-        question: 'Are there processes in place to ensure data quality and reduce bias?',
-        type: 'mitigation',
-        maxScore: 4,
-        options: [
-          { text: 'No specific processes', score: 0 },
-          { text: 'Basic quality checks', score: 1 },
-          { text: 'Regular quality assurance', score: 2 },
-          { text: 'Comprehensive bias detection and mitigation', score: 4 }
-        ]
-      },
-      {
-        id: 'mitigation_002',
-        category: 'De-risking',
-        subcategory: 'Procedural Fairness',
-        question: 'Is there a clear recourse process for individuals affected by decisions?',
-        type: 'mitigation',
-        maxScore: 4,
-        options: [
-          { text: 'No recourse process', score: 0 },
-          { text: 'Limited recourse options', score: 1 },
-          { text: 'Clear recourse process', score: 3 },
-          { text: 'Comprehensive appeal and review process', score: 4 }
-        ]
-      },
-      {
-        id: 'mitigation_003',
-        category: 'De-risking',
-        subcategory: 'Privacy',
-        question: 'Have privacy impact assessments been completed?',
+        question: 'Will you have documented processes in place to test datasets against biases, discrimination, and other unexpected outcomes?',
         type: 'mitigation',
         maxScore: 3,
         options: [
-          { text: 'No privacy assessment', score: 0 },
-          { text: 'Basic privacy review', score: 1 },
-          { text: 'Privacy impact assessment completed', score: 2 },
-          { text: 'Comprehensive privacy protection measures', score: 3 }
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 3 }
+        ]
+      },
+      {
+        id: 'fairnessDesign13',
+        category: 'De-risking',
+        subcategory: 'Procedural Fairness',
+        question: 'Will there be a recourse process planned or established for clients to challenge the decision?',
+        type: 'mitigation',
+        maxScore: 2,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 2 }
+        ]
+      },
+      {
+        id: 'fairnessDesign10',
+        category: 'De-risking',
+        subcategory: 'Procedural Fairness',
+        question: 'Will the system be able to produce reasons for its decisions or recommendations when required?',
+        type: 'mitigation',
+        maxScore: 2,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 2 }
+        ]
+      },
+      {
+        id: 'fairnessDesign24',
+        category: 'De-risking',
+        subcategory: 'Procedural Fairness',
+        question: 'Do you have monitoring processes in place to detect changes in system performance over time?',
+        type: 'mitigation',
+        maxScore: 2,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 2 }
+        ]
+      },
+      {
+        id: 'privacyDesign1',
+        category: 'De-risking',
+        subcategory: 'Privacy',
+        question: 'If your system uses or creates personal information, will you undertake a privacy impact assessment (PIA), or update an existing one prior to system launch?',
+        type: 'mitigation',
+        maxScore: 2,
+        options: [
+          { text: 'No', score: 0 },
+          { text: 'Yes', score: 2 }
         ]
       }
     ];
+  }
+
+  private analyzeProjectDescription(projectName: string, projectDescription: string): ProjectAnalysisResult {
+    const description = projectDescription.toLowerCase();
+    const autoAnswered: AutoAnsweredQuestion[] = [];
+    const needsManualInput: Array<{
+      questionId: string;
+      question: string;
+      category: string;
+      type: 'risk' | 'mitigation';
+      options: Array<{ text: string; score: number }>;
+      reasoning: string;
+    }> = [];
+
+    // Analysis patterns for automatic answering
+    const analysisPatterns = {
+      // System development patterns
+      thirdPartyDeveloped: /third.?party|vendor|contractor|external|outsourced|commercial|off.?the.?shelf|cots/,
+      internalDeveloped: /internal|in.?house|developed.?by.?us|our.?team|custom.?built/,
+      
+      // Data patterns
+      personalData: /personal.?information|pii|personal.?data|names?|addresses?|phone.?numbers?|email|ssn|sin|health.?records|financial.?data|biometric/,
+      sensitiveData: /classified|confidential|secret|protected|sensitive|restricted/,
+      
+      // Automation patterns
+      fullAutomation: /fully.?automated|automatic.?decision|no.?human.?intervention|autonomous|complete.?automation/,
+      partialAutomation: /human.?in.?the.?loop|assisted|support|recommend|partial.?automation|semi.?automated/,
+      
+      // Impact patterns
+      highImpact: /life.?changing|irreversible|permanent|critical|essential|vital|major.?impact/,
+      moderateImpact: /significant|important|moderate|substantial/,
+      lowImpact: /minor|small|limited|minimal/,
+      
+      // Sector patterns
+      healthSector: /health|medical|hospital|clinic|patient|treatment|diagnosis|healthcare/,
+      economicSector: /financial|economic|money|payment|loan|credit|benefit|assistance|employment|job/,
+      lawEnforcement: /police|law.?enforcement|criminal|security|surveillance|investigation/,
+      licensing: /license|permit|certification|approval|registration/,
+      
+      // Algorithm patterns
+      machineLearning: /machine.?learning|ml|ai|artificial.?intelligence|neural.?network|deep.?learning|algorithm.?learns|adaptive/,
+      blackBox: /black.?box|opaque|difficult.?to.?explain|complex.?algorithm|neural.?network|deep.?learning/,
+      
+      // Mitigation patterns
+      consultation: /consult|stakeholder|feedback|input|engagement|community|user.?testing/,
+      biasTesting: /bias.?testing|fairness.?testing|discrimination.?testing|equity.?assessment/,
+      recourse: /appeal|challenge|review|recourse|complaint|dispute/,
+      monitoring: /monitor|track|audit|review|oversight|performance.?tracking/,
+      pia: /privacy.?impact.?assessment|pia|privacy.?review/
+    };
+
+    // Analyze each question
+    for (const question of this.questions) {
+      let answered = false;
+      
+      switch (question.id) {
+        case 'aboutSystem3': // Who developed the system?
+          if (analysisPatterns.thirdPartyDeveloped.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 3, // A non-government third party
+              selectedText: question.options[3].text,
+              confidence: 'high',
+              reasoning: 'Project description indicates third-party or external development'
+            });
+            answered = true;
+          } else if (analysisPatterns.internalDeveloped.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 0, // Your institution
+              selectedText: question.options[0].text,
+              confidence: 'high',
+              reasoning: 'Project description indicates internal development'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'aboutDataSource1': // Will the system use personal information as input data?
+          if (analysisPatterns.personalData.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description mentions personal information or PII'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'impact30': // Type of automation
+          if (analysisPatterns.fullAutomation.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Full automation
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description indicates fully automated decision-making'
+            });
+            answered = true;
+          } else if (analysisPatterns.partialAutomation.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 0, // Partial automation
+              selectedText: question.options[0].text,
+              confidence: 'high',
+              reasoning: 'Project description indicates human-assisted decision-making'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'decisionSector1': // Decision sector
+          if (analysisPatterns.healthSector.test(description) || 
+              analysisPatterns.economicSector.test(description) ||
+              analysisPatterns.lawEnforcement.test(description) ||
+              analysisPatterns.licensing.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description indicates it pertains to a regulated sector'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'aboutAlgorithm8': // Will the algorithm continue to learn and evolve?
+          if (analysisPatterns.machineLearning.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'medium',
+              reasoning: 'Project description mentions machine learning or adaptive algorithms'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'aboutAlgorithm2': // Difficult to interpret or explain
+          if (analysisPatterns.blackBox.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'medium',
+              reasoning: 'Project description suggests complex or opaque algorithmic processes'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'consultationDesign6': // Consult with most impacted clients
+        case 'consultationDesign7': // Consult with adversely impacted clients
+          if (analysisPatterns.consultation.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 2, // Yes
+              selectedText: question.options[2].text,
+              confidence: 'medium',
+              reasoning: 'Project description mentions consultation or stakeholder engagement'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'dataQualityDesign1': // Bias testing processes
+          if (analysisPatterns.biasTesting.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description mentions bias testing or fairness assessment'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'fairnessDesign13': // Recourse process
+          if (analysisPatterns.recourse.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description mentions appeal or challenge processes'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'fairnessDesign24': // Monitoring processes
+          if (analysisPatterns.monitoring.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description mentions monitoring or performance tracking'
+            });
+            answered = true;
+          }
+          break;
+
+        case 'privacyDesign1': // Privacy Impact Assessment
+          if (analysisPatterns.pia.test(description)) {
+            autoAnswered.push({
+              questionId: question.id,
+              question: question.question,
+              selectedOption: 1, // Yes
+              selectedText: question.options[1].text,
+              confidence: 'high',
+              reasoning: 'Project description mentions Privacy Impact Assessment'
+            });
+            answered = true;
+          }
+          break;
+      }
+
+      // If not automatically answered, add to manual input list
+      if (!answered) {
+        needsManualInput.push({
+          questionId: question.id,
+          question: question.question,
+          category: question.category,
+          type: question.type,
+          options: question.options,
+          reasoning: 'Could not be determined from project description - requires manual input'
+        });
+      }
+    }
+
+    // Calculate partial assessment if we have auto-answered questions
+    let partialAssessment;
+    if (autoAnswered.length > 0) {
+      const responses: AIAResponse[] = autoAnswered.map(aa => ({
+        questionId: aa.questionId,
+        selectedOption: aa.selectedOption,
+        score: this.questions.find(q => q.id === aa.questionId)!.options[aa.selectedOption].score
+      }));
+      
+      const assessment = this.calculateAssessment(responses);
+      const completionPercentage = (autoAnswered.length / this.questions.length) * 100;
+      
+      partialAssessment = {
+        ...assessment,
+        completionPercentage: Math.round(completionPercentage * 100) / 100
+      };
+    }
+
+    return {
+      projectName,
+      projectDescription,
+      autoAnswered,
+      needsManualInput,
+      partialAssessment
+    };
   }
 
   private calculateAssessment(responses: AIAResponse[]): {
@@ -465,6 +930,24 @@ class AIAAssessmentServer {
           }
         },
         {
+          name: 'analyze_project_description',
+          description: 'Intelligently analyze a project description to automatically answer AIA questions where possible and identify questions requiring manual input',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectName: {
+                type: 'string',
+                description: 'Name of the project being analyzed'
+              },
+              projectDescription: {
+                type: 'string',
+                description: 'Detailed description of the project and its automated decision-making components'
+              }
+            },
+            required: ['projectName', 'projectDescription']
+          }
+        },
+        {
           name: 'get_questions',
           description: 'Get AIA questions by category or type',
           inputSchema: {
@@ -545,6 +1028,22 @@ class AIAAssessmentServer {
           content: [{
             type: 'text',
             text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      if (request.params.name === 'analyze_project_description') {
+        if (!isValidAnalyzeProjectArgs(request.params.arguments)) {
+          throw new McpError(ErrorCode.InvalidParams, 'Invalid analyze project arguments');
+        }
+
+        const { projectName, projectDescription } = request.params.arguments;
+        const analysisResult = this.analyzeProjectDescription(projectName, projectDescription);
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(analysisResult, null, 2)
           }]
         };
       }
